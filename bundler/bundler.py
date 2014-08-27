@@ -4,6 +4,7 @@ import dircache, shutil
 import re
 from plistlib import Plist
 from distutils import dir_util, file_util
+import xml.etree.ElementTree as ET
 
 from project import *
 import utils
@@ -503,6 +504,23 @@ class Bundler:
             if result:
                 raise OSError, '"' + " ".join(cmdargs) + '" failed %d' % result
 
+    def extract_ui_icons(self, s):
+        try:
+            root = ET.fromstring(s)
+        except:
+            return set()
+
+        ret = set()
+
+        for elem in root.findall('.//'):
+            if elem.text:
+                ret.add(elem.text)
+
+            if elem.tail:
+                ret.add(eleme.tail)
+
+        return ret
+
     def copy_icon_themes(self):
         all_icons = set()
 
@@ -522,13 +540,33 @@ class Bundler:
                         all_icons.add(head)
 
         strings = set()
+        xmlhead = '<?xml version="1.0" encoding="UTF-8"?>'
 
         # Get strings from binaries.
         for f in self.list_copied_binaries():
+
+            uistring = ''
             p = os.popen("strings " + f)
+
             for string in p:
                 string = string.strip()
-                strings.add(string)
+
+                if len(uistring) == 0 and (string == xmlhead or string.startswith(xmlhead + '<interface>')):
+                    uistring = string
+                elif uistring == xmlhead and not string.startswith('<interface><'):
+                    uistring = ''
+
+                if len(uistring) != 0:
+                    if uistring != string:
+                        uistring += string
+
+                    if string.endswith('</interface>'):
+                        icons = self.extract_ui_icons(uistring)
+
+                        strings |= icons
+                        uistring = ''
+                else:
+                    strings.add(string)
 
         # FIXME: Also get strings from glade files.
 
